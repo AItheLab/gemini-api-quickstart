@@ -1,0 +1,16 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Instalar dependencias
+COPY package*.json ./
+RUN npm install
+
+# Copiar archivos de configuración
+COPY vite.config.ts tsconfig*.json ./
+
+# Exponer puerto de desarrollo
+EXPOSE 3000
+
+# Ejecutar en modo desarrollo
+CMD ["npm", "run", "dev"]

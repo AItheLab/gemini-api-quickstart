@@ -1,104 +1,71 @@
-# Gemini API Quickstart - Python
+# Gemini API Modern Stack
 
-This repository contains a simple Python Flask App running with the Google AI Gemini API, designed to get you started building with Gemini's multi-modal capabilities. The app comes with a basic UI and a Flask backend.
+Esta aplicación utiliza la API de Gemini de Google para crear una experiencia interactiva de chat con inteligencia artificial. El proyecto cuenta con un backend API basado en FastAPI y un frontend moderno con Vue 3.
 
-<img width="1271" alt="Screenshot 2024-05-07 at 7 42 28 AM" src="https://github.com/logankilpatrick/gemini-api-quickstart/assets/35577566/156ae3e0-cffa-47a3-8a71-1bded78c4632">
+## Estructura del Proyecto
 
-## Basic request
-
-To send your first API request with the [Google Gen AI SDK](https://ai.google.dev/gemini-api/docs/libraries#python), make sure you have the right dependencies installed (see installation steps below) and then run the following code:
-
-```python
-from google import genai
-
-client = genai.Client(api_key="GEMINI_API_KEY")
-chat = client.chats.create(model="gemini-2.0-flash")
-
-response = chat.send_message("Hello world!")
-print(response.text)
-
-response = chat.send_message("Explain to me how AI works")
-print(response.text)
-
-for message in chat.get_history():
-    print(f'role - {message.role}',end=": ")
-    print(message.parts[0].text)
+```
+gemini-api-quickstart/
+├── main.py               # Backend FastAPI
+├── requirements.txt      # Dependencias Python
+├── Dockerfile           # Configuración de Docker para el backend
+├── docker-compose.yml   # Configuración para producción
+├── docker-compose.dev.yml # Configuración para desarrollo
+└── frontend/            # Frontend Vue 3 + Vite + TypeScript + Tailwind
 ```
 
-## Setup
+## Configuración Rápida
 
-1. If you don’t have Python installed, install it [from Python.org](https://www.python.org/downloads/).
-
-2. [Clone](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) this repository.
-
-3. Create a new virtual environment:
-
-   - macOS:
-     ```bash
-     $ python -m venv venv
-     $ . venv/bin/activate
-     ```
-
-   - Windows:
-     ```cmd
-     > python -m venv venv
-     > .\venv\Scripts\activate
-     ```
-
-   - Linux:
-      ```bash
-      $ python -m venv venv
-      $ source venv/bin/activate
-      ```
-
-4. Install the requirements:
-
-   ```bash
-   $ pip install -r requirements.txt
+1. **Crear archivo `.env`** con tu clave API de Gemini:
+   ```
+   GOOGLE_API_KEY=tu_clave_aqui
    ```
 
-5. Make a copy of the example environment variables file:
-
+2. **Iniciar la aplicación completa con Docker**:
    ```bash
-   $ cp .env.example .env
+   docker-compose up --build
    ```
 
-6. Add your [API key](https://ai.google.dev/gemini-api/docs/api-key) to the newly created `.env` file or as an environment variable.
+   La aplicación estará disponible en:
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+   - Documentación API: http://localhost:8000/docs
 
-7. Run the app:
+3. **Para detener la aplicación**:
+   ```bash
+   docker-compose down
+   ```
 
-```bash
-$ flask run
-```
+## Modo Desarrollo
 
-You should now be able to access the app from your browser at the following URL: [http://localhost:5000](http://localhost:5000)!
-
-## Running with Docker
-
-You can also run the application using Docker:
-
-1. Make sure you have [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) installed.
-
-2. Create a `.env` file with your Gemini API key as described above.
-
-3. Build and start the Docker container:
+Para desarrollo con hot-reload tanto en el frontend como en el backend:
 
 ```bash
-$ docker-compose up --build
+docker-compose -f docker-compose.dev.yml up --build
 ```
 
-4. Access the application at [http://localhost:8000](http://localhost:8000).
+## Características
 
-The application is configured in development mode with hot-reload enabled, so changes to your code will automatically reload the server.
+- **Backend FastAPI** con soporte para:
+  - Sesiones de chat persistentes
+  - Procesamiento de imágenes (multimodal)
+  - Streaming de respuestas en tiempo real
+  - Documentación OpenAPI automática
 
-To run the container in the background:
+- **Frontend Vue 3 + Vite** con:
+  - TypeScript para tipo seguro
+  - Tailwind CSS para estilos
+  - Interfaz de chat moderna y responsive
+  - Soporte para carga de imágenes
+  - Visualización de respuestas en streaming
 
-```bash
-$ docker-compose up -d
-```
+## API Endpoints
 
-To stop the container:
+- `POST /api/sessions` - Crear nueva sesión de chat
+- `GET /api/sessions/{session_id}` - Obtener historial de sesión
+- `POST /api/upload` - Subir imagen para procesamiento
+- `POST /api/chat` - Enviar mensaje de texto
+- `GET /api/stream` - Recibir respuestas en streaming
+- `GET /api/health` - Verificar estado del servicio
 
-```bash
-$ docker-compose down
-```
+Consulta la documentación completa en http://localhost:8000/docs cuando el servidor esté en ejecución.

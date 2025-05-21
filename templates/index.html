@@ -1,58 +1,179 @@
-<!doctype html>
-<html>
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <title>Gemini API Chat</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini AI Chat</title>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 </head>
+<body class="bg-gray-50 h-screen overflow-hidden">
+    <div id="app" class="h-full flex">
+        <!-- Left Sidebar -->
+        <div class="w-1/4 bg-white border-r border-gray-200 flex flex-col h-full">
+            <div class="p-4 border-b border-gray-200">
+                <div class="flex items-center">
+                    <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="Gemini Logo" class="h-8 mr-2">
+                    <h1 class="text-xl font-bold">Gemini Chat</h1>
+                </div>
+            </div>
+            
+            <!-- New Chat Button -->
+            <div class="p-4">
+                <button @click="startNewChat" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-full flex items-center justify-center">
+                    <i class="fas fa-plus mr-2"></i> New Chat
+                </button>
+            </div>
+            
+            <!-- Chat History -->
+            <div class="flex-1 overflow-y-auto p-2">
+                <div class="text-xs uppercase text-gray-500 font-semibold px-2 mb-2">Recent Chats</div>
+                <div 
+                    v-for="(chat, index) in chatHistory" 
+                    :key="index" 
+                    @click="selectChat(index)" 
+                    class="p-2 rounded-lg hover:bg-gray-100 cursor-pointer mb-1 flex items-center"
+                    :class="{'bg-blue-50': selectedChatIndex === index}"
+                >
+                    <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-2">
+                        <i class="fas fa-message text-blue-500"></i>
+                    </div>
+                    <div class="truncate">{{ chat.title || 'New conversation' }}</div>
+                </div>
+            </div>
+            
+            <!-- User Info -->
+            <div class="p-4 border-t border-gray-200">
+                <div class="flex items-center">
+                    <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white mr-2">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div>User</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Chat Area -->
+        <div class="flex-1 flex flex-col h-full relative">
+            <!-- Chat Header -->
+            <div class="p-4 border-b border-gray-200 flex items-center justify-between bg-white">
+                <div class="font-semibold">Gemini-2.0-Flash</div>
+                <div class="flex items-center">
+                    <button class="p-2 rounded-full hover:bg-gray-100">
+                        <i class="fas fa-ellipsis-v text-gray-500"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Messages Area -->
+            <div class="flex-1 overflow-y-auto p-4" ref="messagesContainer">
+                <div v-if="messages.length === 0" class="h-full flex items-center justify-center text-gray-400 flex-col">
+                    <div class="text-6xl mb-4"><i class="fas fa-robot"></i></div>
+                    <div class="text-xl">Start a conversation with Gemini AI</div>
+                    <div class="mt-2 text-sm">You can also upload images for multimodal queries</div>
+                </div>
+                
+                <template v-else>
+                    <div v-for="(message, index) in messages" :key="index" class="mb-6">
+                        <!-- Message Role -->
+                        <div :class="{'text-right': message.role === 'user'}" class="mb-1 text-xs font-semibold text-gray-500">
+                            {{ message.role === 'user' ? 'You' : 'Gemini' }}
+                        </div>
+                        
+                        <!-- Message Content -->
+                        <div 
+                            :class="{
+                                'bg-blue-500 text-white ml-auto': message.role === 'user',
+                                'bg-gray-100 text-gray-800': message.role !== 'user'
+                            }"
+                            class="rounded-lg p-3 max-w-[80%] inline-block whitespace-pre-wrap"
+                            style="width: fit-content"
+                        >
+                            {{ message.content }}
+                        </div>
+                    </div>
+                    
+                    <!-- Typing Indicator -->
+                    <div v-if="isLoading" class="flex items-center mb-6">
+                        <div class="text-xs font-semibold text-gray-500 mb-1">Gemini</div>
+                        <div class="bg-gray-100 text-gray-800 rounded-lg p-3 inline-block">
+                            <div class="typing-indicator">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            
+            <!-- File Upload Preview -->
+            <div v-if="selectedFile" class="px-4 py-2 border-t border-gray-200 bg-blue-50">
+                <div class="flex items-center">
+                    <div class="w-10 h-10 bg-blue-100 rounded flex items-center justify-center mr-2">
+                        <i class="fas fa-image text-blue-500"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm font-semibold truncate">{{ selectedFile.name }}</div>
+                        <div class="text-xs text-gray-500">Image will be included in your next message</div>
+                    </div>
+                    <button @click="removeFile" class="text-red-500 hover:text-red-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Message Input -->
+            <div class="p-4 border-t border-gray-200 bg-white">
+                <div class="flex items-end">
+                    <!-- File Upload Button -->
+                    <button @click="triggerFileUpload" class="p-2 text-gray-500 hover:text-blue-500 rounded-full hover:bg-gray-100 mr-2">
+                        <i class="fas fa-paperclip"></i>
+                    </button>
+                    <input type="file" ref="fileInput" @change="handleFileUpload" accept="image/*" class="hidden">
+                    
+                    <!-- Text Input -->
+                    <div class="flex-1 border border-gray-300 rounded-lg bg-white">
+                        <textarea 
+                            v-model="userMessage" 
+                            @keydown.enter.prevent="sendMessage"
+                            placeholder="Message Gemini..." 
+                            class="w-full p-3 rounded-lg resize-none focus:outline-none"
+                            rows="1"
+                            ref="messageInput"
+                        ></textarea>
+                    </div>
+                    
+                    <!-- Send Button -->
+                    <button 
+                        @click="sendMessage" 
+                        :disabled="!userMessage.trim() && !selectedFile"
+                        :class="{'bg-blue-500 hover:bg-blue-600': userMessage.trim() || selectedFile, 'bg-gray-300': !userMessage.trim() && !selectedFile}"
+                        class="ml-2 p-2 rounded-full text-white w-10 h-10 flex items-center justify-center"
+                    >
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<body>
-  <div id="upload-banner">
-    <!-- Success message will be inserted here -->
-  </div>
-  <div class="main-content">
-    <div class="file-upload-section">
-      <div class="header">
-        <img src="{{ url_for('static', filename='icon.png') }}" alt="Google Gemini Logo" />
-        <div class="demo-text">Demo</div>
-      </div>
-      <div id="filesList">
-        <p id="filesPlaceholder" class="hidden">Files</p>
-      </div>
-      <div class="centered-text">
-        <svg width="39" height="38" viewBox="0 0 39 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path fill-rule="evenodd" clip-rule="evenodd"
-            d="M30.5641 4.04786C29.9974 4.00156 29.2529 4.00001 28.0998 4.00001H17.5002C17.0998 6 16.6975 7.82282 16.2803 9.70819C16.0173 10.8991 15.7862 11.9461 15.2348 12.828C14.7521 13.6002 14.0999 14.2524 13.3277 14.7351C12.4458 15.2864 11.3989 15.5176 10.2079 15.7805C10.1253 15.7988 10.0419 15.8172 9.95788 15.8359L4.93362 16.9524C4.78815 16.9847 4.64286 17.0003 4.49976 17.0004V27.6C4.49976 28.7531 4.50131 29.4977 4.54761 30.0643C4.59201 30.6077 4.66736 30.8091 4.71775 30.908C4.90949 31.2843 5.21545 31.5903 5.59178 31.782C5.69067 31.8324 5.89211 31.9078 6.43543 31.9521C7.00211 31.9984 7.74665 32 8.89976 32H14.4998C15.6043 32 16.4998 32.8954 16.4998 34C16.4998 35.1046 15.6043 36 14.4998 36H8.82263C7.76835 36 6.85884 36.0001 6.1097 35.9389C5.31901 35.8743 4.53258 35.7316 3.77582 35.346C2.64684 34.7708 1.72896 33.8529 1.15372 32.7239C0.768132 31.9672 0.6255 31.1807 0.560898 30.3901C0.499691 29.6409 0.499722 28.7314 0.499758 27.6771L0.499759 16C0.499759 11.8495 2.55485 7.86649 5.46055 4.96079C8.36624 2.0551 12.3493 7.44227e-06 16.4998 7.44227e-06L28.1768 5.53492e-06C29.2311 -3.02279e-05 30.1407 -6.12214e-05 30.8898 0.0611463C31.6805 0.125748 32.4669 0.26838 33.2237 0.653969C34.3527 1.22921 35.2706 2.14709 35.8458 3.27606C36.2314 4.03282 36.374 4.81926 36.4386 5.60995C36.4998 6.35908 36.4998 7.2686 36.4998 8.32287V14C36.4998 15.1046 35.6043 16 34.4998 16C33.3952 16 32.4998 15.1046 32.4998 14V8.40001C32.4998 7.2469 32.4982 6.50235 32.4519 5.93568C32.4075 5.39235 32.3322 5.19091 32.2818 5.09203C32.09 4.7157 31.7841 4.40974 31.4077 4.21799C31.3089 4.16761 31.1074 4.09225 30.5641 4.04786ZM5.06003 12.8267L9.09016 11.9311C10.677 11.5785 10.9859 11.4818 11.2074 11.3433C11.4648 11.1824 11.6822 10.965 11.8431 10.7076C11.9815 10.4862 12.0783 10.1772 12.4309 8.5904L13.3265 4.56028C11.52 5.18578 9.77023 6.30796 8.28897 7.78922C6.80771 9.27048 5.68553 11.0203 5.06003 12.8267ZM28.4998 24C28.4998 22.8954 29.3952 22 30.4998 22C31.6043 22 32.4998 22.8954 32.4998 24V28H36.4998C37.6043 28 38.4998 28.8954 38.4998 30C38.4998 31.1046 37.6043 32 36.4998 32H32.4998V36C32.4998 37.1046 31.6043 38 30.4998 38C29.3952 38 28.4998 37.1046 28.4998 36V32H24.4998C23.3952 32 22.4998 31.1046 22.4998 30C22.4998 28.8954 23.3952 28 24.4998 28H28.4998V24Z"
-            fill="#6E6E80" />
-        </svg>
-        <p>Attach files to make them available to Gemini</p>
-      </div>
-      <input type="file" id="file-upload" name="file-upload" class="file-upload-input" multiple />
-      <label for="file-upload" class="file-upload-btn">Attach files</label>
+    <!-- Toast Notification -->
+    <div 
+        v-if="notification.show" 
+        class="fixed top-4 right-4 bg-gray-800 text-white py-2 px-4 rounded-lg shadow-lg transition-opacity duration-300"
+        :class="{'opacity-100': notification.show, 'opacity-0': !notification.show}"
+    >
+        {{ notification.message }}
     </div>
-    <div class="chat-container">
-      <div class="messages">
-        {% for message in chat_history %}
-        <div class="message-role {{ 'user' if message.role == 'user' else '' }}">
-          {{ message.role.capitalize() }}
-        </div>
-        <div class="{{ 'user-message' if message.role == 'user' else 'assistant-message' }}">
-          {{ message.content }}
-        </div>
-        {% endfor %}
-      </div>
-      <div class="message-input-container">
-        <form action="/chat" method="post">
-          <textarea name="message" placeholder="Chat with Gemini" required></textarea>
-          <div class="button-group">
-            <button type="submit" id="send-btn">&#x2191;</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-  <script src="{{ url_for('static', filename='chat.js') }}"></script>
-  <script src="{{ url_for('static', filename='event-listener.js') }}"></script>
+
+    <!-- Vue App Script -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
-
 </html>

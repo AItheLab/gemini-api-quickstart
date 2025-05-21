@@ -17,12 +17,16 @@ from google import genai
 # Load environment variables from .env file
 load_dotenv()
 
+# Create upload folder if it doesn't exist
+os.makedirs('uploads', exist_ok=True)
+
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 chat_session = client.chats.create(model="gemini-2.0-flash")
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
+app.config['UPLOAD_FOLDER'] = 'uploads'
 
 next_message = ""
 next_image = ""
@@ -45,6 +49,7 @@ def upload_file():
         return jsonify(success=False, message="No file part")
 
     file = request.files["file"]
+    message = request.form.get("message", "")
 
     if file.filename == "":
         return jsonify(success=False, message="No selected file")
@@ -55,6 +60,11 @@ def upload_file():
         file_stream = io.BytesIO(file.read())
         file_stream.seek(0)
         next_image = Image.open(file_stream)
+        
+        # If there's a message with the file upload, save it for the next request
+        if message.strip():
+            global next_message
+            next_message = message
 
         return jsonify(
             success=True,
@@ -67,7 +77,7 @@ def upload_file():
 @app.route("/", methods=["GET"])
 def index():
     """Renders the main homepage for the app"""
-    return render_template("index.html", chat_history=chat_session.get_history())
+    return render_template("index.html")
 
 
 @app.route("/chat", methods=["POST"])
@@ -78,10 +88,37 @@ def chat():
     """
     global next_message
     next_message = request.json["message"]
-    print(chat_session.get_history())
+    print("Message received:", next_message)
+    print("Chat history:", chat_session.get_history())
 
     return jsonify(success=True)
 
+
+@app.route("/get_history", methods=["GET"])
+def get_history():
+    """
+    Returns the chat history
+    """
+    try:
+        history = chat_session.get_history()
+        formatted_history = []
+        
+        for message in history:
+            formatted_history.append({
+                "role": message.role,
+                "content": message.parts[0].text if message.parts else ""
+            })
+            
+        return jsonify({
+            "success": True,
+            "history": formatted_history
+        })
+    except Exception as e:
+        print(f"Error fetching history: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"Error fetching history: {str(e)}"
+        })
 
 @app.route("/stream", methods=["GET"])
 def stream():
@@ -94,16 +131,25 @@ def stream():
         global next_image
         assistant_response_content = ""
 
-        if next_image != "":
-            response = chat_session.send_message_stream([next_message, next_image])
-            next_image = ""
-        else:
-            response = chat_session.send_message_stream(next_message)
+        try:
+            if next_image != "":
+                print("Sending multimodal message...")
+                response = chat_session.send_message_stream([next_message, next_image])
+                next_image = ""
+            else:
+                print("Sending text message...")
+                response = chat_session.send_message_stream(next_message)
+                
             next_message = ""
 
-        for chunk in response:
-            assistant_response_content += chunk.text
-            yield f"data: {chunk.text}\n\n"
+            for chunk in response:
+                if chunk.text:
+                    assistant_response_content += chunk.text
+                    yield f"data: {chunk.text}\n\n"
+                    
+        except Exception as e:
+            print(f"Error in stream generation: {str(e)}")
+            yield f"data: [Error: {str(e)}]\n\n"
 
     return Response(stream_with_context(generate()),
                     mimetype="text/event-stream")

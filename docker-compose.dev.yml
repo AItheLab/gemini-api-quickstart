@@ -14,19 +14,17 @@ services:
       - .:/app
     restart: unless-stopped
 
-  # Frontend service
-  frontend:
+  # Frontend service (Development mode)
+  frontend-dev:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     ports:
-      - "3000:80"
+      - "3000:3000"
     depends_on:
       - api
     volumes:
       - ./frontend:/app
-      # Exclude node_modules from volume mount
       - /app/node_modules
     environment:
       - VITE_API_BASE_URL=http://localhost:8000/api
-
