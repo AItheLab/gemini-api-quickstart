@@ -2,15 +2,19 @@ from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any # Ensure Any is imported
 from PIL import Image
 import io
 import os
 import uuid
 import asyncio
+import json # Added for JSON operations
+from pathlib import Path # Added for path manipulation
+import aiofiles # Added for async file operations
 from dotenv import load_dotenv
 
 from google import genai
+# Removed incorrect import: from google.generativeai.types import Chat as GenAIChat
 
 # Load environment variables from .env file
 load_dotenv()
@@ -44,6 +48,10 @@ app.add_middleware(
 chat_sessions: Dict[str, Any] = {}
 pending_messages: Dict[str, str] = {}
 pending_images: Dict[str, Image.Image] = {}
+
+# Directory for storing chat histories
+CHAT_HISTORY_DIR = Path("chat_histories")
+CHAT_HISTORY_DIR.mkdir(parents=True, exist_ok=True) # Create directory if it doesn't exist
 
 # Pydantic models for request/response validation
 class MessageRequest(BaseModel):
@@ -97,28 +105,71 @@ async def get_session_id_flexible(
 async def create_session():
     """Creates a new chat session"""
     session_id = str(uuid.uuid4())
-    chat_sessions[session_id] = client.chats.create(model="gemini-2.0-flash")
+    # _get_or_create_chat_session will create and cache it
+    await _get_or_create_chat_session(session_id) 
     return {
         "success": True,
         "session_id": session_id
     }
 
-@app.get("/api/sessions/{session_id}", response_model=HistoryResponse)
-async def get_session(session_id: str):
-    """Get the history of a chat session"""
-    if session_id not in chat_sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+# Helper function to consolidate SDK history list for output
+def _consolidate_sdk_history_for_output(sdk_history_list: List[Any]) -> List[Dict[str, str]]:
+    """
+    Consolidates a list of SDK message objects, merging consecutive model messages
+    and ensuring a clean list of {'role': ..., 'content': ...} dicts.
+    """
+    consolidated_messages = []
+    i = 0
+    while i < len(sdk_history_list):
+        sdk_msg = sdk_history_list[i]
+        current_role = sdk_msg.role if sdk_msg.role in ["user", "model"] else "model"
         
-    history = []
-    for message in chat_sessions[session_id].get_history():
-        history.append({
-            "role": message.role,
-            "content": message.parts[0].text if message.parts else ""
-        })
+        current_content_parts = []
+        if sdk_msg.parts:
+            for part in sdk_msg.parts:
+                if hasattr(part, 'text') and part.text:
+                    current_content_parts.append(part.text)
+        full_content = " ".join(current_content_parts)
+
+        if current_role == "model":
+            j = i + 1
+            while j < len(sdk_history_list):
+                next_sdk_msg = sdk_history_list[j]
+                next_role = next_sdk_msg.role if next_sdk_msg.role in ["user", "model"] else "model"
+                if next_role == "model":
+                    next_content_parts = []
+                    if next_sdk_msg.parts:
+                        for part_next in next_sdk_msg.parts:
+                            if hasattr(part_next, 'text') and part_next.text:
+                                next_content_parts.append(part_next.text)
+                    if next_content_parts:
+                        full_content = (full_content + " " + " ".join(next_content_parts)).strip()
+                    j += 1
+                else:
+                    break 
+            i = j - 1 
+        
+        if full_content.strip() or current_role == "user":
+            consolidated_messages.append({
+                "role": current_role,
+                "content": full_content.strip()
+            })
+        i += 1
+    return consolidated_messages
+
+@app.get("/api/sessions/{session_id}", response_model=HistoryResponse)
+async def get_session_history(session_id: str): # Renamed for clarity from get_session
+    """Get the history of a chat session"""
+    chat_session_obj = await _get_or_create_chat_session(session_id)
+    
+    history_from_sdk = chat_session_obj.get_history() # This might be fragmented by the SDK
+    
+    # Consolidate the history before sending to frontend
+    final_formatted_history = _consolidate_sdk_history_for_output(history_from_sdk)
         
     return {
         "success": True,
-        "history": history
+        "history": final_formatted_history
     }
 
 @app.post("/api/upload")
@@ -127,8 +178,8 @@ async def upload_file(
     session_id: str = Depends(get_session_id)
 ):
     """Upload an image file for multi-modal processing"""
-    if session_id not in chat_sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+    # Ensure session object is loaded/created and cached
+    await _get_or_create_chat_session(session_id) 
         
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
@@ -159,8 +210,8 @@ async def chat(
     session_id: str = Depends(get_session_id)
 ):
     """Save a message to be processed by the AI"""
-    if session_id not in chat_sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+    # Ensure session object is loaded/created and cached
+    chat_session_obj = await _get_or_create_chat_session(session_id)
     
     pending_messages[session_id] = message_request.message
     
@@ -173,36 +224,49 @@ async def stream(
     """Stream the AI response to a message"""
     print(f"Attempting to stream for session_id: {session_id}")
     
-    if session_id not in chat_sessions:
-        print(f"Session ID {session_id} not found in chat_sessions.")
-        raise HTTPException(status_code=404, detail="Session not found")
+    chat_session_obj = await _get_or_create_chat_session(session_id)
     
-    if session_id not in pending_messages:
-        print(f"Session ID {session_id} not found in pending_messages. Pending messages keys: {list(pending_messages.keys())}")
-        raise HTTPException(status_code=400, detail="No pending message")
+    if session_id not in pending_messages and session_id not in pending_images:
+        print(f"No pending message or image for session_id: {session_id}. Pending messages: {list(pending_messages.keys())}, Pending images: {list(pending_images.keys())}")
+        raise HTTPException(status_code=400, detail="No pending message or image to process")
+
+    message_text = pending_messages.get(session_id, "") 
+    image_obj = pending_images.get(session_id)
     
-    print(f"Pending message found for session_id: {session_id}")
-    # Prepare for streaming
-    message = pending_messages[session_id]
-    has_image = session_id in pending_images
-    chat_session = chat_sessions[session_id]
-    
+    print(f"Pending content for session_id {session_id}: Text='{message_text}', Image present: {image_obj is not None}")
     
     async def generate():
-        # Handle multimodal or text-only message
-        if has_image:
-            image = pending_images[session_id]
-            response = chat_session.send_message_stream([message, image])
-            del pending_images[session_id]
-        else:
-            response = chat_session.send_message_stream(message)
+        try:
+            send_payload = []
+            if message_text:
+                send_payload.append(message_text)
+            if image_obj:
+                send_payload.append(image_obj)
 
-        # Stream the response
-        for chunk in response:
-            yield f"data: {chunk.text}\n\n"
-        
-        # Signal end of stream
-        yield "data: [DONE]\n\n"
+            if not send_payload: 
+                 yield "data: [Error: No content to send]\n\n"
+                 yield "data: [DONE]\n\n"
+                 return
+
+            response = chat_session_obj.send_message_stream(send_payload)
+
+            for chunk in response:
+                if hasattr(chunk, 'text') and chunk.text:
+                    yield f"data: {chunk.text}\n\n"
+            
+            sdk_history_list = chat_session_obj.get_history()
+            consolidated_history_to_save = _consolidate_sdk_history_for_output(sdk_history_list)
+            await save_history_to_file(session_id, consolidated_history_to_save)
+
+        except Exception as e:
+            print(f"Error during stream generation or history saving for {session_id}: {e}")
+            yield f"data: [Error: {str(e)}]\n\n"
+        finally:
+            if session_id in pending_messages:
+                del pending_messages[session_id]
+            if session_id in pending_images:
+                del pending_images[session_id]
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),
@@ -213,6 +277,66 @@ async def stream(
 async def health_check():
     """Health check endpoint"""
     return {"status": "ok"}
+
+# Helper functions for persistent chat history
+async def save_history_to_file(session_id: str, history: List[Dict[str, Any]]):
+    """Saves chat history to a JSON file."""
+    filepath = CHAT_HISTORY_DIR / f"{session_id}.json"
+    try:
+        async with aiofiles.open(filepath, "w") as f:
+            await f.write(json.dumps(history, indent=2))
+        print(f"History saved for session {session_id} to {filepath}")
+    except Exception as e:
+        print(f"Error saving history for session {session_id}: {e}")
+
+async def load_history_from_file(session_id: str) -> Optional[List[Dict[str, Any]]]:
+    """Loads chat history from a JSON file."""
+    filepath = CHAT_HISTORY_DIR / f"{session_id}.json"
+    if not filepath.exists():
+        return None
+    try:
+        async with aiofiles.open(filepath, "r") as f:
+            content = await f.read()
+            history = json.loads(content)
+        print(f"History loaded for session {session_id} from {filepath}")
+        return history
+    except Exception as e:
+        print(f"Error loading history for session {session_id}: {e}")
+        return None
+
+async def _get_or_create_chat_session(session_id: str) -> Any: # Changed type hint to Any
+    """
+    Retrieves an existing chat session or creates a new one,
+    loading history from file if available.
+    """
+    if session_id in chat_sessions:
+        return chat_sessions[session_id]
+
+    loaded_history_data = await load_history_from_file(session_id)
+    
+    sdk_history_to_init = []
+    if loaded_history_data:
+        for msg_data in loaded_history_data:
+            if "content" in msg_data and isinstance(msg_data["content"], str):
+                 sdk_history_to_init.append({
+                    'role': msg_data['role'],
+                    'parts': [{'text': msg_data['content']}]
+                })
+            elif "parts" in msg_data: 
+                 sdk_history_to_init.append({
+                    'role': msg_data['role'],
+                    'parts': msg_data['parts']
+                })
+
+    if sdk_history_to_init:
+        print(f"Creating session {session_id} with {len(sdk_history_to_init)} history entries.")
+        session = client.chats.create(model="gemini-2.0-flash", history=sdk_history_to_init)
+    else:
+        print(f"Creating new empty session {session_id}.")
+        session = client.chats.create(model="gemini-2.0-flash")
+    
+    chat_sessions[session_id] = session 
+    return session
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,0 +1,18 @@
+[
+  {
+    "role": "user",
+    "content": "De nuevo yo!"
+  },
+  {
+    "role": "model",
+    "content": "\u00a1 Hola de  nuevo! \u00bfEn qu\u00e9 puedo ayudarte hoy? \ud83d\ude0a"
+  },
+  {
+    "role": "user",
+    "content": "Sabes que hora es?"
+  },
+  {
+    "role": "model",
+    "content": "Por  supuesto. Seg\u00fan mi informaci\u00f3n, son las 10:02 PM."
+  }
+]
