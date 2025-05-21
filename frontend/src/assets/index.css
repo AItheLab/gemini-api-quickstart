@@ -2,7 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Estilos personalizados */
 body {
-  @apply bg-gray-100 min-h-screen font-sans; /* Added a default font-family */
+  @apply bg-ch-bg-darkest text-ch-text-primary font-sans;
+  min-height: 100vh;
+  overflow: hidden; /* Para evitar doble scrollbar si los paneles internos gestionan el suyo */
+}
+
+/* Estilos personalizados para scrollbar (opcional, pero mejora la estética en temas oscuros) */
+::-webkit-scrollbar {
+  width: 6px; /* Más delgada como en la referencia */
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-ch-bg-input;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-ch-bubble-other rounded; /* Menos redondeado */
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500; /* Usar un color de tu paleta si prefieres */
+}
+
+/* Clases de utilidad para un look más "CH" */
+.ch-panel {
+  @apply bg-ch-bg-panel rounded-lg shadow-lg;
+}
+
+.ch-input-field {
+  @apply bg-ch-bg-input border border-ch-border rounded-md px-3 py-2 text-ch-text-primary placeholder-ch-text-placeholder focus:ring-ch-accent focus:border-ch-accent outline-none;
 }

@@ -171,19 +171,22 @@ async def stream(
     session_id: str = Depends(get_session_id_flexible)
 ):
     """Stream the AI response to a message"""
+    print(f"Attempting to stream for session_id: {session_id}")
+    
     if session_id not in chat_sessions:
+        print(f"Session ID {session_id} not found in chat_sessions.")
         raise HTTPException(status_code=404, detail="Session not found")
     
     if session_id not in pending_messages:
+        print(f"Session ID {session_id} not found in pending_messages. Pending messages keys: {list(pending_messages.keys())}")
         raise HTTPException(status_code=400, detail="No pending message")
     
+    print(f"Pending message found for session_id: {session_id}")
     # Prepare for streaming
     message = pending_messages[session_id]
     has_image = session_id in pending_images
     chat_session = chat_sessions[session_id]
     
-    # Clear the pending message
-    del pending_messages[session_id]
     
     async def generate():
         # Handle multimodal or text-only message
@@ -197,6 +200,9 @@ async def stream(
         # Stream the response
         for chunk in response:
             yield f"data: {chunk.text}\n\n"
+        
+        # Signal end of stream
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),
