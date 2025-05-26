@@ -7,63 +7,41 @@ const apiClient = axios.create({
   }
 })
 
-const SESSION_IDS_KEY = 'geminiChatSessionIds'
-let currentSessionId: string | null = null; // Almacenar el ID de la sesión activa en memoria
+let currentSessionId: string | null = null
 
-// Cargar el último session ID activo o el primero de la lista al iniciar
-const loadInitialSessionId = (): string | null => {
-    const ids = getSessionIdsFromStorage();
-    // Podrías añadir lógica para recordar el último activo aquí si lo guardas también
-    return ids.length > 0 ? ids[0] : null;
-};
-
-// No inicializar currentSessionId durante la importación del módulo
-// currentSessionId = loadInitialSessionId(); 
-
-
-const getSessionIdsFromStorage = (): string[] => {
-  const storedIds = localStorage.getItem(SESSION_IDS_KEY)
-  return storedIds ? JSON.parse(storedIds) : []
+// Interfaces para tipado
+interface ChatMetadata {
+  session_id: string
+  title: string
+  created_at: number
+  updated_at: number
+  message_count: number
+  last_message_preview: string
+  tags: string[]
+  is_pinned: boolean
 }
 
-const saveSessionIdToStorage = (sessionId: string) => {
-  const ids = getSessionIdsFromStorage()
-  if (!ids.includes(sessionId)) {
-    ids.unshift(sessionId) // Añadir al principio para que el más nuevo esté arriba
-    localStorage.setItem(SESSION_IDS_KEY, JSON.stringify(ids))
-  }
+interface ChatListResponse {
+  success: boolean
+  chats: ChatMetadata[]
+  total: number
 }
-
-const removeSessionIdFromStorage = (sessionIdToRemove: string) => {
-    let ids = getSessionIdsFromStorage();
-    ids = ids.filter(id => id !== sessionIdToRemove);
-    localStorage.setItem(SESSION_IDS_KEY, JSON.stringify(ids));
-    if (currentSessionId === sessionIdToRemove) {
-        currentSessionId = ids.length > 0 ? ids[0] : null; // Cambia a la siguiente o a null
-    }
-};
-
 
 export const chatService = {
-  // Método para inicializar el servicio de forma explícita
+  // Método para inicializar el servicio
   initialize(): void {
-    if (currentSessionId === null) {
-      currentSessionId = loadInitialSessionId();
-      console.log('chatService: Initialized with session ID:', currentSessionId);
-    }
+    console.log('chatService: Initialized')
   },
 
   async createSession(): Promise<string> {
     try {
-      // Usar el nuevo endpoint /sessions implementado en el backend
       const response = await apiClient.post('/sessions')
       const newSessionId = response.data.session_id
       if (newSessionId) {
-        saveSessionIdToStorage(newSessionId)
-        currentSessionId = newSessionId; // Establecer como la sesión activa
-        console.log('Nueva sesión creada con ID:', newSessionId);
+        currentSessionId = newSessionId
+        console.log('Nueva sesión creada con ID:', newSessionId)
       } else {
-        throw new Error('El servidor no devolvió un ID de sesión válido');
+        throw new Error('El servidor no devolvió un ID de sesión válido')
       }
       return newSessionId
     } catch (error) {
@@ -73,34 +51,87 @@ export const chatService = {
   },
 
   setActiveSession(sessionId: string | null) {
-    currentSessionId = sessionId;
-    // Opcional: guardar el último sessionId activo en localStorage también
+    currentSessionId = sessionId
   },
 
   getActiveSession(): string | null {
-    if (!currentSessionId) { // Si no hay uno activo, intenta cargar el primero de la lista
-        const ids = getSessionIdsFromStorage();
-        if (ids.length > 0) {
-            currentSessionId = ids[0];
-        }
+    return currentSessionId
+  },
+
+  // NUEVO: Obtener todos los chats desde el backend
+  async getAllChats(): Promise<ChatMetadata[]> {
+    try {
+      const response = await apiClient.get<ChatListResponse>('/chats')
+      if (response.data.success) {
+        return response.data.chats
+      } else {
+        throw new Error('Error en la respuesta del servidor')
+      }
+    } catch (error) {
+      console.error('Error al obtener lista de chats:', error)
+      return [] // Retornar array vacío en caso de error
     }
-    return currentSessionId;
   },
 
-  getAllSessionIds(): string[] {
-    return getSessionIdsFromStorage()
+  // NUEVO: Buscar chats
+  async searchChats(query: string): Promise<ChatMetadata[]> {
+    try {
+      const response = await apiClient.get<ChatListResponse>(`/chats?search=${encodeURIComponent(query)}`)
+      if (response.data.success) {
+        return response.data.chats
+      } else {
+        throw new Error('Error en la búsqueda')
+      }
+    } catch (error) {
+      console.error('Error al buscar chats:', error)
+      return []
+    }
   },
 
-  removeSession(sessionIdToRemove: string): void {
-    removeSessionIdFromStorage(sessionIdToRemove);
+  // NUEVO: Eliminar chat usando la API del backend
+  async removeSession(sessionId: string): Promise<boolean> {
+    try {
+      const response = await apiClient.delete(`/chats/${sessionId}`)
+      if (response.data.success) {
+        // Si eliminamos la sesión activa, limpiar la referencia
+        if (currentSessionId === sessionId) {
+          currentSessionId = null
+        }
+        console.log(`Chat ${sessionId} eliminado correctamente`)
+        return true
+      } else {
+        throw new Error(response.data.message || 'Error al eliminar chat')
+      }
+    } catch (error) {
+      console.error('Error al eliminar chat:', error)
+      return false
+    }
   },
 
-  async getHistory(sessionId: string) { // Ahora requiere sessionId
+  // NUEVO: Actualizar metadatos del chat
+  async updateChatMetadata(sessionId: string, updates: {
+    title?: string
+    add_tags?: string[]
+    remove_tags?: string[]
+    toggle_pin?: boolean
+  }): Promise<boolean> {
+    try {
+      const response = await apiClient.put(`/chats/${sessionId}`, updates)
+      if (response.data.success) {
+        console.log(`Metadatos del chat ${sessionId} actualizados`)
+        return true
+      } else {
+        throw new Error(response.data.message || 'Error al actualizar metadatos')
+      }
+    } catch (error) {
+      console.error('Error al actualizar metadatos:', error)
+      return false
+    }
+  },
+
+  async getHistory(sessionId: string) {
     if (!sessionId) {
-      // Intenta obtener la activa si no se provee una específica, aunque es mejor ser explícito
-      const activeId = this.getActiveSession();
-      if (!activeId) throw new Error('No hay sesión activa o ID de sesión provisto');
-      sessionId = activeId;
+      throw new Error('Session ID requerido')
     }
 
     try {
@@ -108,17 +139,14 @@ export const chatService = {
       return response.data.history
     } catch (error) {
       console.error(`Error al obtener historial para sesión ${sessionId}:`, error)
-      // Podrías querer limpiar una sesión inválida del storage aquí
       if (axios.isAxiosError(error) && error.response && error.response.status === 404) {
-        console.warn(`Sesión ${sessionId} no encontrada en el backend. Removiendo del historial local.`);
-        removeSessionIdFromStorage(sessionId); // Limpia sesión inválida
-        // Podrías emitir un evento o manejar el cambio de UI aquí
+        console.warn(`Sesión ${sessionId} no encontrada en el backend.`)
       }
       throw new Error(`No se pudo obtener el historial de chat para la sesión ${sessionId}`)
     }
   },
 
-  async uploadFile(file: File, sessionId: string) { // Requiere sessionId
+  async uploadFile(file: File, sessionId: string) {
     if (!sessionId) throw new Error('No hay sesión activa para subir archivo')
 
     const formData = new FormData()
@@ -138,7 +166,7 @@ export const chatService = {
     }
   },
 
-  async sendMessage(message: string, sessionId: string) { // Requiere sessionId
+  async sendMessage(message: string, sessionId: string) {
     if (!sessionId) throw new Error('No hay sesión activa para enviar mensaje')
 
     try {
@@ -153,12 +181,10 @@ export const chatService = {
     }
   },
 
-  streamResponse(sessionId: string): EventSource { // Requiere sessionId
+  streamResponse(sessionId: string): EventSource {
     if (!sessionId) throw new Error('No hay sesión activa para stream')
 
     const url = `/api/stream?session_id=${sessionId}`
-    // EventSource no permite cabeceras personalizadas fácilmente para GET,
-    // el backend ya acepta session_id como query param, lo cual es bueno.
     return new EventSource(url, { withCredentials: true })
   }
 }

@@ -13,14 +13,14 @@
     <div class="flex-grow flex flex-col h-full">
       <header class="bg-ch-bg-panel h-14 flex items-center px-6 border-b border-ch-border flex-shrink-0">
         <h1 class="text-lg font-semibold">
-          {{ activeSessionId ? `Chat ${activeSessionId.substring(0, 8)}...` : 'Gemini Chat' }}
+          {{ currentChatTitle || 'Gemini Chat' }}
         </h1>
       </header>
 
       <main class="flex-grow overflow-hidden bg-ch-bg-chat-area">
-        <!-- Importante: ChatWindow solo se renderiza si activeSessionId es una cadena no vacía -->
+        <!-- ChatWindow solo se renderiza si hay una sesión activa -->
         <ChatWindow
-          v-if="activeSessionId && typeof activeSessionId === 'string' && activeSessionId.length > 0"
+          v-if="activeSessionId"
           :key="activeSessionId" 
           :session-id="activeSessionId"
           class="h-full"
@@ -29,10 +29,8 @@
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-16 h-16 mb-4">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 01.778-.332 48.294 48.294 0 005.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
           </svg>
-          <p class="text-xl">Selecciona un chat o crea uno nuevo para comenzar.</p>
-          <button @click="triggerNewSessionCreation" class="mt-6 px-4 py-2 bg-ch-accent text-white rounded-lg hover:bg-opacity-80">
-            Crear Nuevo Chat
-          </button>
+          <p class="text-xl">Envía un mensaje para empezar.</p>
+          <p class="text-sm mt-2">O adjunta una imagen.</p>
         </div>
       </main>
     </div>
@@ -40,84 +38,99 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import ChatHistoryPanel from './components/ChatHistoryPanel.vue'
 import ChatWindow from './components/ChatWindow.vue'
 import { chatService } from './services/chatService'
 
+interface ChatMetadata {
+  session_id: string
+  title: string
+  created_at: number
+  updated_at: number
+  message_count: number
+  last_message_preview: string
+  tags: string[]
+  is_pinned: boolean
+}
+
 const activeSessionId = ref<string | null>(null)
-console.log('App.vue: script setup evaluated, activeSessionId initial:', activeSessionId.value);
+const currentChatTitle = ref<string>('')
+const availableChats = ref<ChatMetadata[]>([])
 
-
-const loadAndSetInitialSession = () => {
-  console.log('App.vue: loadAndSetInitialSession called');
-  // Inicializar explícitamente el servicio chat
-  chatService.initialize();
-  
-  const initialId = chatService.getActiveSession(); 
-  console.log('App.vue: chatService.getActiveSession() returned:', initialId);
-  if (initialId) {
-    activeSessionId.value = initialId;
-    chatService.setActiveSession(initialId); // Asegurar que el servicio también lo sepa
-    console.log('App.vue: activeSessionId set to (from initial load):', activeSessionId.value);
-  } else {
-    console.log('App.vue: No initial active session ID found.');
-    // Opcional: crear una sesión si no existe ninguna
-    // triggerNewSessionCreation(); 
+// Load available chats from backend
+const loadAvailableChats = async () => {
+  try {
+    availableChats.value = await chatService.getAllChats()
+    
+    // If no active session but chats exist, select the most recent one
+    if (!activeSessionId.value && availableChats.value.length > 0) {
+      const mostRecentChat = availableChats.value[0] // Already sorted by date
+      handleSelectSession(mostRecentChat.session_id)
+    }
+  } catch (error) {
+    console.error('App: Error loading chats:', error)
+    availableChats.value = []
   }
-};
+}
 
 const handleSelectSession = (sessionId: string) => {
-  console.log('App.vue: handleSelectSession triggered with sessionId:', sessionId);
   chatService.setActiveSession(sessionId)
   activeSessionId.value = sessionId
-  console.log('App.vue: activeSessionId set to (from select):', activeSessionId.value);
+  
+  // Find the title of the selected chat
+  const selectedChat = availableChats.value.find((chat: ChatMetadata) => chat.session_id === sessionId)
+  currentChatTitle.value = selectedChat ? selectedChat.title : `Chat ${sessionId.substring(0, 8)}...`
 }
 
-const handleSessionCreated = (newSessionId: string) => {
-  console.log('App.vue: handleSessionCreated triggered with newSessionId:', newSessionId);
-  chatService.setActiveSession(newSessionId); 
-  activeSessionId.value = newSessionId 
-  console.log('App.vue: activeSessionId set to (from created):', activeSessionId.value);
+const handleSessionCreated = async (newSessionId: string) => {
+  chatService.setActiveSession(newSessionId)
+  activeSessionId.value = newSessionId
+  currentChatTitle.value = 'New chat' // Keep UI text in Spanish as per plan, but this is a default title
+  
+  // Reload chat list to include the new one
+  await loadAvailableChats()
 }
 
-const handleSessionDeleted = (deletedSessionId: string, wasActive: boolean) => {
-  console.log('App.vue: handleSessionDeleted triggered for sessionId:', deletedSessionId, 'wasActive:', wasActive);
+const handleSessionDeleted = async (deletedSessionId: string, wasActive: boolean) => {
+  // Reload chats from backend
+  await loadAvailableChats()
+  
   if (wasActive || activeSessionId.value === deletedSessionId) {
-    const remainingSessions = chatService.getAllSessionIds();
-    if (remainingSessions.length > 0) {
-      const newActive = remainingSessions[0];
-      chatService.setActiveSession(newActive);
-      activeSessionId.value = newActive;
-      console.log('App.vue: activeSessionId set to (after delete, new active):', activeSessionId.value);
+    // If we delete the active session, select another or clear
+    if (availableChats.value.length > 0) {
+      const newActive = availableChats.value[0]
+      handleSelectSession(newActive.session_id)
     } else {
-      chatService.setActiveSession(null);
-      activeSessionId.value = null;
-      console.log('App.vue: activeSessionId set to null (after delete, no sessions left)');
+      chatService.setActiveSession(null)
+      activeSessionId.value = null
+      currentChatTitle.value = ''
     }
   }
-};
+}
 
-
-const triggerNewSessionCreation = async () => {
-  console.log('App.vue: triggerNewSessionCreation called');
-  try {
-    const newSessionId = await chatService.createSession();
-    console.log('App.vue: New session created by trigger:', newSessionId);
-    // ChatHistoryPanel debería actualizarse por su cuenta al leer de localStorage
-    // Solo necesitamos asegurarnos de que la nueva sesión se active aquí.
-    await nextTick(); 
-    handleSessionCreated(newSessionId); // Esto establecerá activeSessionId y notificará al servicio
-  } catch (error) {
-    console.error("App.vue: Error creando nueva sesión desde trigger:", error);
-    alert("No se pudo crear una nueva sesión.");
+// Watcher to update title when active session changes
+watch(activeSessionId, async (newSessionId: string | null) => {
+  if (newSessionId) {
+    // Find the updated chat title
+    const chatData = availableChats.value.find((chat: ChatMetadata) => chat.session_id === newSessionId)
+    if (chatData) {
+      currentChatTitle.value = chatData.title
+    } else {
+      // If not found in cache, reload
+      await loadAvailableChats()
+      const updatedChat = availableChats.value.find((chat: ChatMetadata) => chat.session_id === newSessionId)
+      currentChatTitle.value = updatedChat ? updatedChat.title : `Chat ${newSessionId.substring(0, 8)}...`
+    }
+  } else {
+    currentChatTitle.value = ''
   }
-};
-
+})
 
 onMounted(() => {
-  console.log('App.vue: onMounted triggered');
-  loadAndSetInitialSession();
+  console.log('App: Component mounted')
+  chatService.initialize()
+  loadAvailableChats()
 })
 </script>
 
