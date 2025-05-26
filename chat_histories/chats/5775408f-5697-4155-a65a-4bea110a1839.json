@@ -1,0 +1,14 @@
+[
+  {
+    "role": "user",
+    "content": "Que hora es?",
+    "timestamp": 1748267331.4182758,
+    "message_id": "5775408f-5697-4155-a65a-4bea110a1839_1748267331418"
+  },
+  {
+    "role": "model",
+    "content": "La hora actual es  13:48.",
+    "timestamp": 1748267331.4390378,
+    "message_id": "5775408f-5697-4155-a65a-4bea110a1839_1748267331439"
+  }
+]

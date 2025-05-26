@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Header, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any, AsyncGenerator
 
@@ -13,11 +13,13 @@ from pathlib import Path
 import aiofiles
 from dotenv import load_dotenv
 import traceback 
+import uvicorn
 
 from google import genai
 from google.genai import types as genai_types
 
 from tools.tool_registry import get_available_tools_for_sdk, get_tool_implementation
+from chat_manager import ChatHistoryManager
 
 load_dotenv()
 
@@ -36,6 +38,9 @@ app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
 
+# Inicializar el gestor de historial mejorado
+chat_history_manager = ChatHistoryManager()
+
 chat_histories: Dict[str, List[genai_types.Content]] = {}
 pending_messages: Dict[str, str] = {}
 pending_images: Dict[str, Image.Image] = {} 
@@ -48,6 +53,32 @@ class SessionResponse(BaseModel): success: bool; session_id: str
 class MessageResponse(BaseModel): success: bool
 class HistoryItem(BaseModel): role: str; content: str 
 class HistoryResponse(BaseModel): success: bool; history: List[HistoryItem]
+
+# Modelos para el sistema de historial mejorado
+class ChatMetadata(BaseModel):
+    session_id: str
+    title: str
+    created_at: float
+    updated_at: float
+    message_count: int
+    last_message_preview: str
+    tags: List[str]
+    is_pinned: bool
+
+class ChatListResponse(BaseModel):
+    success: bool
+    chats: List[ChatMetadata]
+    total: int
+
+class UpdateChatRequest(BaseModel):
+    title: Optional[str] = None
+    add_tags: Optional[List[str]] = None
+    remove_tags: Optional[List[str]] = None
+    toggle_pin: Optional[bool] = None
+
+class StatsResponse(BaseModel):
+    success: bool
+    stats: Dict[str, Any]
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 def allowed_file(filename: str) -> bool:
@@ -149,16 +180,72 @@ async def _get_or_create_chat_history(session_id: str) -> List[genai_types.Conte
 @app.post("/api/sessions", response_model=SessionResponse)
 async def create_session_endpoint_v2(): 
     session_id = str(uuid.uuid4())
-    await _get_or_create_chat_history(session_id) 
-    # print(f"DEBUG: Session created: {session_id}") # Comentado
+    await _get_or_create_chat_history(session_id)
+    
+    # Crear también en el sistema de historial mejorado
+    if not chat_history_manager.get_chat_metadata(session_id):
+        chat_history_manager.create_chat(session_id, genai.Client(api_key=GEMINI_API_KEY))
+    
+    print(f"Session created: {session_id}")
     return SessionResponse(success=True, session_id=session_id)
 
 @app.get("/api/sessions/{session_id}", response_model=HistoryResponse)
 async def get_session_history_v2(session_id: str): 
-    sdk_history = await _get_or_create_chat_history(session_id)
-    api_history = _sdk_history_to_api_history(sdk_history)
-    # print(f"DEBUG: Getting history for session {session_id}, {len(api_history)} items.") # Comentado
-    return HistoryResponse(success=True, history=api_history)
+    # Usar el sistema de historial mejorado en lugar del antiguo
+    try:
+        # Primero intentar obtener del sistema mejorado
+        messages = chat_history_manager.get_chat_messages(session_id)
+        
+        if messages:
+            # Convertir mensajes del ChatHistoryManager al formato esperado
+            api_history = []
+            for msg in messages:
+                api_history.append(HistoryItem(role=msg.role, content=msg.content))
+            print(f"History loaded from ChatHistoryManager for session {session_id}: {len(api_history)} messages")
+            return HistoryResponse(success=True, history=api_history)
+        
+        # Si no hay mensajes en el sistema mejorado, intentar migrar desde el sistema antiguo
+        sdk_history = await _get_or_create_chat_history(session_id)
+        if sdk_history:
+            # Migrar al sistema mejorado
+            if not chat_history_manager.get_chat_metadata(session_id):
+                chat_history_manager.create_chat(session_id, genai.Client(api_key=GEMINI_API_KEY))
+            
+            # Convertir y guardar cada mensaje
+            for content_obj in sdk_history:
+                role = content_obj.role if content_obj.role else "user"
+                
+                if role in ["user", "model"]:
+                    text_content = ""
+                    if content_obj.parts:
+                        for part in content_obj.parts:
+                            if hasattr(part, 'text') and part.text is not None:
+                                text_content += part.text
+                    
+                    if text_content.strip():
+                        chat_history_manager.add_message(
+                            session_id, role, text_content.strip(), 
+                            genai.Client(api_key=GEMINI_API_KEY)
+                        )
+            
+            # Obtener los mensajes migrados
+            migrated_messages = chat_history_manager.get_chat_messages(session_id)
+            api_history = []
+            for msg in migrated_messages:
+                api_history.append(HistoryItem(role=msg.role, content=msg.content))
+            
+            print(f"History migrated for session {session_id}: {len(api_history)} messages")
+            return HistoryResponse(success=True, history=api_history)
+        
+        # Si no hay historial en ningún lado, devolver vacío
+        return HistoryResponse(success=True, history=[])
+        
+    except Exception as e:
+        print(f"Error getting history for session {session_id}: {e}")
+        # Fallback al sistema antiguo si hay error
+        sdk_history = await _get_or_create_chat_history(session_id)
+        api_history = _sdk_history_to_api_history(sdk_history)
+        return HistoryResponse(success=True, history=api_history)
 
 @app.post("/api/upload")
 async def upload_file_endpoint_v2( 
@@ -322,7 +409,31 @@ async def stream_endpoint_v2(session_id: str = Depends(get_session_id_flexible))
                     yield f"data: {error_msg}\n\n"
                     current_sdk_history.append(genai_types.Content(role="model", parts=[genai_types.Part.from_text(text=error_msg)]))
             
+            # Guardar tanto en el sistema antiguo como en el nuevo
             await save_chat_history_to_file(session_id, current_sdk_history)
+            
+            # Integrar con el sistema de historial mejorado
+            if not chat_history_manager.get_chat_metadata(session_id):
+                chat_history_manager.create_chat(session_id, genai.Client(api_key=GEMINI_API_KEY))
+            
+            # Sincronizar mensajes al sistema de historial mejorado
+            api_history = _sdk_history_to_api_history(current_sdk_history)
+            existing_messages = chat_history_manager.get_chat_messages(session_id)
+            
+            # Solo añadir mensajes nuevos que no existan ya
+            for hist_item in api_history:
+                # Buscar si ya existe este mensaje
+                content_exists = any(
+                    msg.content == hist_item.content and msg.role == hist_item.role 
+                    for msg in existing_messages
+                )
+                if not content_exists:
+                    chat_history_manager.add_message(
+                        session_id, 
+                        hist_item.role, 
+                        hist_item.content, 
+                        genai.Client(api_key=GEMINI_API_KEY)
+                    )
 
         except Exception as e:
             print(f"ERROR FATAL en generate_response_from_gemini para sesión {session_id}:")
@@ -338,6 +449,176 @@ async def stream_endpoint_v2(session_id: str = Depends(get_session_id_flexible))
                 final_done_sent = True
                 
     return StreamingResponse(generate_response_from_gemini(), media_type="text/event-stream")
+
+# Nuevos endpoints para historial mejorado
+@app.get("/api/chats", response_model=ChatListResponse)
+async def list_all_chats(
+    search: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None), 
+    pinned: Optional[bool] = Query(None)
+):
+    """Obtiene la lista de todos los chats con metadatos"""
+    try:
+        if search:
+            chats = chat_history_manager.search_chats(search, search_in_content=True)
+        else:
+            chats = chat_history_manager.get_all_chats_metadata()
+        
+        # Filtrar por etiqueta si se especifica
+        if tag:
+            chats = [chat for chat in chats if tag in chat.tags]
+        
+        # Filtrar solo chats fijados si se especifica
+        if pinned:
+            chats = [chat for chat in chats if chat.is_pinned]
+        
+        # Formatear respuesta
+        formatted_chats = []
+        for chat in chats:
+            formatted_chats.append(ChatMetadata(
+                session_id=chat.session_id,
+                title=chat.custom_title or chat.title,
+                created_at=chat.created_at,
+                updated_at=chat.updated_at,
+                message_count=chat.message_count,
+                last_message_preview=chat.last_message_preview,
+                tags=chat.tags,
+                is_pinned=chat.is_pinned
+            ))
+        
+        return ChatListResponse(
+            success=True,
+            chats=formatted_chats,
+            total=len(formatted_chats)
+        )
+        
+    except Exception as e:
+        print(f"Error listing chats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error listing chats: {str(e)}")
+
+@app.put("/api/chats/{session_id}")
+async def update_chat_metadata(session_id: str, update_request: UpdateChatRequest):
+    """Actualiza metadatos de un chat específico"""
+    try:
+        # Verificar que el chat existe
+        metadata = chat_history_manager.get_chat_metadata(session_id)
+        if not metadata:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        
+        # Actualizar título si se proporciona
+        if update_request.title:
+            chat_history_manager.update_chat_title(session_id, update_request.title)
+        
+        # Alternar pin si se solicita
+        if update_request.toggle_pin:
+            chat_history_manager.toggle_pin_chat(session_id)
+        
+        # Añadir etiquetas
+        if update_request.add_tags:
+            for tag in update_request.add_tags:
+                chat_history_manager.add_tag_to_chat(session_id, tag)
+        
+        # Eliminar etiquetas
+        if update_request.remove_tags:
+            for tag in update_request.remove_tags:
+                chat_history_manager.remove_tag_from_chat(session_id, tag)
+        
+        # Obtener metadatos actualizados
+        updated_metadata = chat_history_manager.get_chat_metadata(session_id)
+        
+        return {
+            "success": True,
+            "metadata": {
+                "title": updated_metadata.custom_title or updated_metadata.title,
+                "created_at": updated_metadata.created_at,
+                "updated_at": updated_metadata.updated_at,
+                "message_count": updated_metadata.message_count,
+                "tags": updated_metadata.tags,
+                "is_pinned": updated_metadata.is_pinned
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating chat metadata for {session_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating chat: {str(e)}")
+
+@app.delete("/api/chats/{session_id}")
+async def delete_chat(session_id: str):
+    """Elimina un chat completamente"""
+    try:
+        # Verificar que el chat existe
+        metadata = chat_history_manager.get_chat_metadata(session_id)
+        if not metadata:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        
+        # Eliminar el chat
+        chat_history_manager.delete_chat(session_id)
+        
+        # También limpiar de sesiones activas si existe
+        if session_id in chat_histories:
+            del chat_histories[session_id]
+        if session_id in pending_messages:
+            del pending_messages[session_id]
+        if session_id in pending_images:
+            del pending_images[session_id]
+        
+        return {"success": True, "message": "Chat deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting chat {session_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting chat: {str(e)}")
+
+@app.get("/api/chats/{session_id}/export")
+async def export_chat(session_id: str, format: str = Query("json")):
+    """Exporta un chat en el formato especificado"""
+    try:
+        if format not in ["json", "txt"]:
+            raise HTTPException(status_code=400, detail="Format must be 'json' or 'txt'")
+        
+        # Verificar que el chat existe
+        metadata = chat_history_manager.get_chat_metadata(session_id)
+        if not metadata:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        
+        # Exportar el chat
+        exported_data = chat_history_manager.export_chat(session_id, format)
+        
+        if exported_data is None:
+            raise HTTPException(status_code=500, detail="Failed to export chat")
+        
+        # Configurar respuesta según el formato
+        if format == "json":
+            return Response(
+                content=exported_data,
+                media_type="application/json",
+                headers={"Content-Disposition": f"attachment; filename=chat_{session_id}.json"}
+            )
+        else:  # txt
+            return Response(
+                content=exported_data,
+                media_type="text/plain",
+                headers={"Content-Disposition": f"attachment; filename=chat_{session_id}.txt"}
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error exporting chat {session_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error exporting chat: {str(e)}")
+
+@app.get("/api/stats", response_model=StatsResponse)
+async def get_chat_stats():
+    """Obtiene estadísticas generales del historial de chats"""
+    try:
+        stats = chat_history_manager.get_stats()
+        return StatsResponse(success=True, stats=stats)
+    except Exception as e:
+        print(f"Error getting stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting stats: {str(e)}")
 
 @app.get("/api/health")
 async def health_check_v2(): return {"status": "ok"}

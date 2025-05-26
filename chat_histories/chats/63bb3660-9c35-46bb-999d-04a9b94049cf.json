@@ -1,0 +1,14 @@
+[
+  {
+    "role": "user",
+    "content": "Hola",
+    "timestamp": 1748267301.9619226,
+    "message_id": "63bb3660-9c35-46bb-999d-04a9b94049cf_1748267301961"
+  },
+  {
+    "role": "model",
+    "content": "Hola!  En qué puedo ayudarte?",
+    "timestamp": 1748267301.9824731,
+    "message_id": "63bb3660-9c35-46bb-999d-04a9b94049cf_1748267301982"
+  }
+]

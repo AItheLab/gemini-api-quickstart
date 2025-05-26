@@ -1,0 +1,10 @@
+[
+  {
+    "role": "user",
+    "content": "Que hora es?"
+  },
+  {
+    "role": "model",
+    "content": "La hora actual es  13:48."
+  }
+]

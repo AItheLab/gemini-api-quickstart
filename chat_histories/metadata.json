@@ -1,0 +1,57 @@
+{
+  "63bb3660-9c35-46bb-999d-04a9b94049cf": {
+    "session_id": "63bb3660-9c35-46bb-999d-04a9b94049cf",
+    "title": "Hola",
+    "created_at": 1748267294.7414548,
+    "updated_at": 1748267301.9824731,
+    "message_count": 2,
+    "last_message_preview": "Hola!  En qué puedo ayudarte?",
+    "tags": [],
+    "is_pinned": false,
+    "custom_title": null
+  },
+  "6c3bba52-65e5-41a5-a0bc-80157f3514da": {
+    "session_id": "6c3bba52-65e5-41a5-a0bc-80157f3514da",
+    "title": "Que dia es?",
+    "created_at": 1748267310.2367806,
+    "updated_at": 1748267319.2475765,
+    "message_count": 2,
+    "last_message_preview": "Hoy  es 26 de mayo de 2025.",
+    "tags": [],
+    "is_pinned": false,
+    "custom_title": null
+  },
+  "5775408f-5697-4155-a65a-4bea110a1839": {
+    "session_id": "5775408f-5697-4155-a65a-4bea110a1839",
+    "title": "Que hora es?",
+    "created_at": 1748267322.9782422,
+    "updated_at": 1748267331.4390378,
+    "message_count": 2,
+    "last_message_preview": "La hora actual es  13:48.",
+    "tags": [],
+    "is_pinned": false,
+    "custom_title": null
+  },
+  "52978b7f-48ab-479a-b3a4-e1e92152a1ef": {
+    "session_id": "52978b7f-48ab-479a-b3a4-e1e92152a1ef",
+    "title": "Holi holi",
+    "created_at": 1748267490.3685293,
+    "updated_at": 1748267510.666715,
+    "message_count": 6,
+    "last_message_preview": "¿Hay  algo en lo que te pueda ayudar?",
+    "tags": [],
+    "is_pinned": false,
+    "custom_title": null
+  },
+  "5dfd5c85-3daf-45d2-acb9-db219ec474a7": {
+    "session_id": "5dfd5c85-3daf-45d2-acb9-db219ec474a7",
+    "title": "Nuevo chat",
+    "created_at": 1748267514.0659974,
+    "updated_at": 1748267514.0659974,
+    "message_count": 0,
+    "last_message_preview": "",
+    "tags": [],
+    "is_pinned": false,
+    "custom_title": null
+  }
+}

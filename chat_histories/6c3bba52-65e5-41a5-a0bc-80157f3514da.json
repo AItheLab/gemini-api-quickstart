@@ -1,0 +1,10 @@
+[
+  {
+    "role": "user",
+    "content": "Que dia es?"
+  },
+  {
+    "role": "model",
+    "content": "Hoy  es 26 de mayo de 2025."
+  }
+]

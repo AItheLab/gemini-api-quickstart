@@ -1,0 +1,38 @@
+[
+  {
+    "role": "user",
+    "content": "Holi holi",
+    "timestamp": 1748267496.412425,
+    "message_id": "52978b7f-48ab-479a-b3a4-e1e92152a1ef_1748267496412"
+  },
+  {
+    "role": "model",
+    "content": "¡ Hola! ¿En qué puedo ayudarte hoy?",
+    "timestamp": 1748267496.4330537,
+    "message_id": "52978b7f-48ab-479a-b3a4-e1e92152a1ef_1748267496433"
+  },
+  {
+    "role": "user",
+    "content": "como estas?",
+    "timestamp": 1748267503.7887764,
+    "message_id": "52978b7f-48ab-479a-b3a4-e1e92152a1ef_1748267503788"
+  },
+  {
+    "role": "model",
+    "content": "Como  modelo de lenguaje, no tengo sentimientos, pero estoy funcionando correctamente. ¿En qué te  puedo ayudar hoy?",
+    "timestamp": 1748267503.8068666,
+    "message_id": "52978b7f-48ab-479a-b3a4-e1e92152a1ef_1748267503806"
+  },
+  {
+    "role": "user",
+    "content": "ah ok",
+    "timestamp": 1748267510.6426282,
+    "message_id": "52978b7f-48ab-479a-b3a4-e1e92152a1ef_1748267510642"
+  },
+  {
+    "role": "model",
+    "content": "¿Hay  algo en lo que te pueda ayudar?",
+    "timestamp": 1748267510.666715,
+    "message_id": "52978b7f-48ab-479a-b3a4-e1e92152a1ef_1748267510666"
+  }
+]

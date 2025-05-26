@@ -1,0 +1,26 @@
+[
+  {
+    "role": "user",
+    "content": "Holi holi"
+  },
+  {
+    "role": "model",
+    "content": "\u00a1 Hola! \u00bfEn qu\u00e9 puedo ayudarte hoy?"
+  },
+  {
+    "role": "user",
+    "content": "como estas?"
+  },
+  {
+    "role": "model",
+    "content": "Como  modelo de lenguaje, no tengo sentimientos, pero estoy funcionando correctamente. \u00bfEn qu\u00e9 te  puedo ayudar hoy?"
+  },
+  {
+    "role": "user",
+    "content": "ah ok"
+  },
+  {
+    "role": "model",
+    "content": "\u00bfHay  algo en lo que te pueda ayudar?"
+  }
+]
