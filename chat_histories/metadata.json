@@ -45,11 +45,22 @@
   },
   "5dfd5c85-3daf-45d2-acb9-db219ec474a7": {
     "session_id": "5dfd5c85-3daf-45d2-acb9-db219ec474a7",
-    "title": "Nuevo chat",
+    "title": "Hola",
     "created_at": 1748267514.0659974,
-    "updated_at": 1748267514.0659974,
-    "message_count": 0,
-    "last_message_preview": "",
+    "updated_at": 1748292858.6711032,
+    "message_count": 4,
+    "last_message_preview": "Muy  bien, gracias por preguntar. ¿En qué te puedo ayudar hoy?",
+    "tags": [],
+    "is_pinned": false,
+    "custom_title": null
+  },
+  "d7e6ea5d-1088-4a5f-99b5-05be30a9e05b": {
+    "session_id": "d7e6ea5d-1088-4a5f-99b5-05be30a9e05b",
+    "title": "Hola",
+    "created_at": 1748293131.9199617,
+    "updated_at": 1748293191.7590332,
+    "message_count": 4,
+    "last_message_preview": "La imagen muestra un  paisaje extraterrestre con un OVNI volando sobre él. El paisaje parece ser  un...",
     "tags": [],
     "is_pinned": false,
     "custom_title": null

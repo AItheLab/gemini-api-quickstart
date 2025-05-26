@@ -1,1 +1,26 @@
-[]
+[
+  {
+    "role": "user",
+    "content": "Hola",
+    "timestamp": 1748292843.6465461,
+    "message_id": "5dfd5c85-3daf-45d2-acb9-db219ec474a7_1748292843646"
+  },
+  {
+    "role": "model",
+    "content": "Hola! En  qué puedo ayudarte hoy?",
+    "timestamp": 1748292843.671615,
+    "message_id": "5dfd5c85-3daf-45d2-acb9-db219ec474a7_1748292843671"
+  },
+  {
+    "role": "user",
+    "content": "que tal",
+    "timestamp": 1748292858.6390386,
+    "message_id": "5dfd5c85-3daf-45d2-acb9-db219ec474a7_1748292858639"
+  },
+  {
+    "role": "model",
+    "content": "Muy  bien, gracias por preguntar. ¿En qué te puedo ayudar hoy?",
+    "timestamp": 1748292858.6711032,
+    "message_id": "5dfd5c85-3daf-45d2-acb9-db219ec474a7_1748292858671"
+  }
+]

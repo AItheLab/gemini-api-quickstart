@@ -289,7 +289,12 @@ async def stream_endpoint_v2(session_id: str = Depends(get_session_id_flexible))
     if user_text:
         user_parts.append(genai_types.Part.from_text(text=user_text))
     if user_image:
-        user_parts.append(user_image)
+        # Convertir la imagen PIL al formato correcto para la API de Gemini
+        img_byte_arr = io.BytesIO()
+        # Guardar como JPEG para asegurar compatibilidad
+        user_image.save(img_byte_arr, format='JPEG')
+        img_byte_arr = img_byte_arr.getvalue()
+        user_parts.append(genai_types.Part.from_bytes(data=img_byte_arr, mime_type="image/jpeg"))
     
     if not user_parts: 
         async def empty_parts_stream():

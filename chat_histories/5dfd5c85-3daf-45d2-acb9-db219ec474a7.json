@@ -1,0 +1,18 @@
+[
+  {
+    "role": "user",
+    "content": "Hola"
+  },
+  {
+    "role": "model",
+    "content": "Hola! En  qu\u00e9 puedo ayudarte hoy?"
+  },
+  {
+    "role": "user",
+    "content": "que tal"
+  },
+  {
+    "role": "model",
+    "content": "Muy  bien, gracias por preguntar. \u00bfEn qu\u00e9 te puedo ayudar hoy?"
+  }
+]

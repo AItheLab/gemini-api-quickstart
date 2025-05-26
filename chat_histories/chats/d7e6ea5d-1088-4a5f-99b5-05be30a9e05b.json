@@ -1,0 +1,26 @@
+[
+  {
+    "role": "user",
+    "content": "Hola",
+    "timestamp": 1748293140.0128973,
+    "message_id": "d7e6ea5d-1088-4a5f-99b5-05be30a9e05b_1748293140012"
+  },
+  {
+    "role": "model",
+    "content": "Hola ! En qué puedo ayudarte hoy?",
+    "timestamp": 1748293140.0363717,
+    "message_id": "d7e6ea5d-1088-4a5f-99b5-05be30a9e05b_1748293140036"
+  },
+  {
+    "role": "user",
+    "content": "que hay en esta foto?",
+    "timestamp": 1748293191.7389908,
+    "message_id": "d7e6ea5d-1088-4a5f-99b5-05be30a9e05b_1748293191738"
+  },
+  {
+    "role": "model",
+    "content": "La imagen muestra un  paisaje extraterrestre con un OVNI volando sobre él. El paisaje parece ser  una superficie helada o nevada con formaciones rocosas irregulares. En el  cielo hay varios planetas o lunas.",
+    "timestamp": 1748293191.7590332,
+    "message_id": "d7e6ea5d-1088-4a5f-99b5-05be30a9e05b_1748293191759"
+  }
+]

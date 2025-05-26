@@ -1,0 +1,18 @@
+[
+  {
+    "role": "user",
+    "content": "Hola"
+  },
+  {
+    "role": "model",
+    "content": "Hola ! En qu\u00e9 puedo ayudarte hoy?"
+  },
+  {
+    "role": "user",
+    "content": "que hay en esta foto?"
+  },
+  {
+    "role": "model",
+    "content": "La imagen muestra un  paisaje extraterrestre con un OVNI volando sobre \u00e9l. El paisaje parece ser  una superficie helada o nevada con formaciones rocosas irregulares. En el  cielo hay varios planetas o lunas."
+  }
+]
